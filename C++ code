@@ -1,0 +1,157 @@
+#include <iostream>
+#include <vector>
+#include <queue>
+#include <algorithm>
+using namespace std;
+
+const int SEP = 2;
+
+// Aircraft details
+struct Aircraft {
+    int id, req, fuel;
+    char type;
+    bool emergency, connect;
+    int slot, runway;
+};
+
+// Report's priority score
+long score(const Aircraft& a) {
+    long base = 0;
+
+    if (a.emergency) base += 1000;
+    if (a.type == 'A' && a.fuel <= 15) base += 500;
+    if (a.connect) base += 20;
+
+    return base - a.req;
+}
+
+// Priority queue: highest score first
+struct Cmp {
+    bool operator()(Aircraft a, Aircraft b) {
+        return score(a) < score(b);
+    }
+};
+
+// CO4: BST node
+struct Node {
+    int key;
+    Aircraft plane;
+    Node *left, *right;
+
+    Node(int k, Aircraft a) {
+        key = k;
+        plane = a;
+        left = right = NULL;
+    }
+};
+
+// Insert into BST
+Node* insert(Node* root, int key, Aircraft a) {
+    if (root == NULL)
+        return new Node(key, a);
+
+    if (key < root->key)
+        root->left = insert(root->left, key, a);
+    else
+        root->right = insert(root->right, key, a);
+
+    return root;
+}
+
+// Display schedule in sorted order
+void inorder(Node* root) {
+    if (root == NULL) return;
+
+    inorder(root->left);
+
+    cout << "Aircraft " << root->plane.id
+         << " | Runway " << root->plane.runway
+         << " | Time " << root->plane.slot << endl;
+
+    inorder(root->right);
+}
+
+// Find when a runway is available, skipping closure
+int getOpenTime(int runway, int freeAt) {
+    if (runway == 1 && freeAt >= 15 && freeAt < 40)
+        return 40;
+
+    return freeAt;
+}
+
+int main() {
+    vector<Aircraft> v = {
+        {101, 0, 30, 'A', false, false, 0, 0},
+        {102, 2, 10, 'A', false, true,  0, 0},
+        {103, 4, 25, 'D', true,  false, 0, 0},
+        {104, 6, 20, 'A', false, false, 0, 0},
+        {105, 8, 12, 'A', false, true,  0, 0}
+    };
+
+    int n = v.size();
+
+    // CO3: Sort by request time
+    sort(v.begin(), v.end(), [](Aircraft a, Aircraft b) {
+        return a.req < b.req;
+    });
+
+    // CO2: Priority queue
+    priority_queue<Aircraft, vector<Aircraft>, Cmp> pq;
+
+    // Runway availability times
+    int freeAt[3] = {0, 0, 0};
+
+    Node* root = NULL;
+    int i = 0, t = 0;
+
+    while (i < n || !pq.empty()) {
+
+        // Add aircraft that have requested by time t
+        while (i < n && v[i].req <= t) {
+            pq.push(v[i]);
+            i++;
+        }
+
+        // If no aircraft is waiting, move to next request
+        if (pq.empty()) {
+            t = v[i].req;
+            continue;
+        }
+
+        // Find runway with earliest opening time
+        int open1 = getOpenTime(1, freeAt[1]);
+        int open2 = getOpenTime(2, freeAt[2]);
+
+        int r = (open1 <= open2) ? 1 : 2;
+        int openTime = (r == 1) ? open1 : open2;
+
+        // Wait until the selected runway is open
+        if (openTime > t) {
+            t = openTime;
+            continue;
+        }
+
+        // Serve highest-priority aircraft
+        Aircraft a = pq.top();
+        pq.pop();
+
+        a.slot = t;
+        a.runway = r;
+
+        freeAt[r] = t + SEP;
+
+        // CO4: Insert schedule entry into BST
+        root = insert(root, a.slot * 10 + r, a);
+
+        cout << "Scheduled Aircraft " << a.id
+             << " on Runway " << r
+             << " at time " << t << endl;
+
+        t++;
+    }
+
+    cout << "\nFinal Schedule (BST Inorder):\n";
+    inorder(root);
+
+    return 0;
+}
